@@ -89,7 +89,7 @@
   footer{text-align:center;color:var(--muted);font-size:12px;margin-top:30px;}
   .toast{position:fixed;left:50%;bottom:32px;transform:translateX(-50%);
     background:rgba(40,40,40,.92);color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;
-    z-index:120;opacity:0;transition:.3s;pointer-events:none;}
+    z-index:120;opacity:0;transition:.3s;pointer-events:none;max-width:90vw;}
   .toast.show{opacity:1;}
 </style>
 </head>
@@ -144,7 +144,7 @@
     <div class="savebar" id="savebar">
       <input id="saveName" placeholder="给这套主题起个名字（可留空，默认用主题名）">
       <button class="btn" id="saveBtn">💾 保存主题</button>
-      <div class="tip">保存后可在「📚 历史主题」里随时查看、重新修改或删除。</div>
+      <div class="tip">保存时同时存入「云端 + 本机」：即使服务器重启/重新部署，你本机浏览器里的历史也能正常查看与重新修改。</div>
     </div>
   </div>
 
@@ -155,7 +155,7 @@
 
   <!-- 历史主题区块 -->
   <div id="historySection" style="display:none;">
-    <div class="section-title">📚 历史主题 <span class="tag">云端保存，可重新修改</span></div>
+    <div class="section-title">📚 历史主题 <span class="tag">云端+本机镜像，可重新修改</span></div>
     <div id="histList"><div class="hist-empty">还没有保存过主题，生成后点「💾 保存主题」即可留档。</div></div>
   </div>
 
@@ -164,7 +164,7 @@
 
 <div class="lb" id="lb">
   <span class="close" onclick="closeLb()">×</span>
-  <img id="lbImg" src="" alt="">
+  <img id="lbImg" src="" alt="" style="display:none;">
   <div class="info" id="lbInfo"></div>
 </div>
 <div class="toast" id="toast"></div>
@@ -172,12 +172,43 @@
 <script>
 const $ = id => document.getElementById(id);
 let jobId = null, timer = null;
+let currentResults = [], currentAnswers = null;
+const LS_KEY = 'acg_themes_v1';
 
 function toast(msg){
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 1800);
+  setTimeout(()=>t.classList.remove('show'), 2200);
 }
 
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]
+  ));
+}
+
+// ---------------- localStorage 镜像（服务器重启/重部署后历史仍可用） ----------------
+function loadLocal(){
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; }
+  catch(e){ return []; }
+}
+function saveLocal(list){
+  try { localStorage.setItem(LS_KEY, JSON.stringify(list)); } catch(e){}
+}
+function addLocalTheme(rec){
+  const list = loadLocal();
+  list.unshift(rec);
+  saveLocal(list);
+}
+function removeLocalTheme(id){
+  const list = loadLocal().filter(t => t.id !== id);
+  saveLocal(list);
+}
+function coverOf(results){
+  const x = (results||[]).find(r => r.image || r.remote_url);
+  return x ? (x.image || x.remote_url) : null;
+}
+
+// ---------------- 示例 / 生成 ----------------
 $('demo').onclick = () => {
   $('kids').value='8 个';
   $('format').value='幼儿园班级课';
@@ -195,6 +226,8 @@ $('go').onclick = async () => {
     effect: $('effect').value.trim(),
     theme: $('theme').value.trim(),
   };
+  currentAnswers = answers;
+  currentResults = [];
   $('go').disabled = true;
   $('progress').style.display = 'block';
   $('results').style.display = 'block';
@@ -224,15 +257,18 @@ function poll(){
       const s = await r.json();
       if (s.error) { clearInterval(timer); alert(s.error); resetBtn(); return; }
       const done = s.done || 0, total = s.total || 0;
+      currentResults = s.results || [];
       setBar(done, total, total ? `已生成 ${done} / ${total} 张` : '排队中…');
-      renderResults(s.results || []);
+      renderResults(currentResults);
       if (s.status === 'finished') {
         clearInterval(timer);
-        setBar(done, total, `全部完成！共 ${done} 张`);
+        const ok = currentResults.filter(x=>x.image||x.remote_url).length;
+        setBar(done, total, `全部完成！成功 ${ok} / ${total} 张`);
         resetBtn();
-        $('savebar').style.display = 'flex';   // 生成完成，显示保存栏
+        if (ok > 0) $('savebar').style.display = 'flex';
+        else toast('本次没有成功生成的图片，暂不能保存');
       }
-    } catch(e) { /* 继续轮询 */ }
+    } catch(e) { /* 网络抖动，继续轮询 */ }
   }, 2000);
 }
 
@@ -254,20 +290,28 @@ function fill(gridId, list){
   list.forEach(it => {
     const d = document.createElement('div');
     d.className = 'thumb';
-    if (it.image){
+    const src = it.image || it.remote_url;
+    if (src){
       const img = document.createElement('img');
-      img.src = it.image; img.alt = it.title;
-      img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'),
-        {className:'err', textContent:'图片已失效'})); };
+      img.alt = it.title;
+      img.src = src;
+      img.onerror = () => {
+        if (src === it.image && it.remote_url){ img.src = it.remote_url; }
+        else { img.replaceWith(Object.assign(document.createElement('div'),
+          {className:'err', textContent:'图片已失效'})); }
+      };
       d.appendChild(img);
       const cap = document.createElement('div');
       cap.className = 'cap'; cap.textContent = it.title;
       d.appendChild(cap);
-      d.onclick = () => openLb(it.image, it.title, it.prompt);
+      d.onclick = () => openLb(it.image, it.remote_url, it.title, it.prompt);
     } else if (it.error){
       const e = document.createElement('div');
-      e.className = 'err'; e.textContent = '⚠️ ' + it.title + ' 失败';
+      e.className = 'err';
+      e.textContent = '⚠️ ' + it.title + (it.error ? '：' + it.error : ' 失败');
       d.appendChild(e);
+      d.onclick = () => openLb(null, null, it.title,
+        (it.prompt||'') + (it.error ? '\n\n失败原因：' + it.error : ''));
     } else {
       const e = document.createElement('div');
       e.className = 'err'; e.textContent = '⏳ ' + it.title;
@@ -277,24 +321,37 @@ function fill(gridId, list){
   });
 }
 
-// ---------------- 保存主题 ----------------
+// ---------------- 保存主题（云端 + 本机镜像） ----------------
 $('saveBtn').onclick = async () => {
   if (!jobId){ alert('还没有可保存的生成结果'); return; }
   const name = $('saveName').value.trim();
   $('saveBtn').disabled = true;
   try {
-    const r = await fetch('/save', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({job_id: jobId, name})
-    });
-    const data = await r.json();
-    if (data.error){ alert(data.error); }
-    else { toast('已保存到历史主题：' + data.name); $('savebar').style.display='none'; }
-  } catch(e){ alert('保存失败：' + e.message); }
-  finally { $('saveBtn').disabled = false; }
+    const rec = {
+      id: 'local_' + Math.random().toString(36).slice(2) + Date.now().toString(36),
+      name: name || (currentAnswers && currentAnswers.theme) || '未命名主题',
+      created_at: new Date().toISOString().slice(0,19).replace('T',' '),
+      answers: currentAnswers,
+      results: currentResults,
+    };
+    addLocalTheme(rec);   // 先存本机，确保用户永不丢数据
+    let cloudMsg = '';
+    try {
+      const r = await fetch('/save', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({job_id: jobId, name: rec.name})
+      });
+      const data = await r.json();
+      cloudMsg = data.error ? '（云端：' + data.error + '）' : '（云端+本机）';
+    } catch(e){ cloudMsg = '（云端暂不可达，已存本机）'; }
+    toast('已保存：' + rec.name + cloudMsg);
+    $('savebar').style.display='none';
+    $('historySection').style.display='block';
+    loadHistory();
+  } finally { $('saveBtn').disabled = false; }
 };
 
-// ---------------- 历史主题 ----------------
+// ---------------- 历史主题（云端 + 本机合并展示） ----------------
 $('toHistory').onclick = () => {
   const sec = $('historySection');
   if (sec.style.display === 'none'){
@@ -310,96 +367,106 @@ $('toTop').onclick = () => $('formCard').scrollIntoView({behavior:'smooth'});
 async function loadHistory(){
   const list = $('histList');
   list.innerHTML = '<div class="hist-empty">加载中…</div>';
-  try {
-    const r = await fetch('/history');
-    const items = await r.json();
-    if (!items.length){
-      list.innerHTML = '<div class="hist-empty">还没有保存过主题，生成后点「💾 保存主题」即可留档。</div>';
-      return;
-    }
-    list.innerHTML = '';
-    items.forEach(it => list.appendChild(histCard(it)));
-  } catch(e){
-    list.innerHTML = '<div class="hist-empty">加载历史失败：' + e.message + '</div>';
+  let server = [];
+  try { const r = await fetch('/history'); server = await r.json(); } catch(e){}
+  const local = loadLocal();
+  const merged = [
+    ...server.map(s => ({...s, source:'server', answers:null, results:null})),
+    ...local.map(l => ({
+      id:l.id, name:l.name, created_at:l.created_at,
+      theme:(l.answers||{}).theme||'', cover:coverOf(l.results),
+      remote_cover:coverOf(l.results),
+      count:(l.results||[]).filter(x=>x.image||x.remote_url).length,
+      source:'local', answers:l.answers, results:l.results
+    }))
+  ];
+  if (!merged.length){
+    list.innerHTML = '<div class="hist-empty">还没有保存过主题，生成后点「💾 保存主题」即可留档（会自动存在本机）。</div>';
+    return;
   }
+  list.innerHTML = '';
+  merged.forEach(it => list.appendChild(histCard(it)));
 }
 
 function histCard(it){
   const c = document.createElement('div');
   c.className = 'hist-card';
   const img = document.createElement('img');
-  if (it.cover){ img.src = it.cover; img.onerror = ()=>{img.replaceWith(Object.assign(document.createElement('div'),{style:'width:84px;height:84px;flex:none;background:#f3eee7;border-radius:10px'}));}; }
+  if (it.cover){ img.src = it.cover; img.onerror = ()=>{ if(it.remote_cover){ img.src=it.remote_cover; } else { img.style.visibility='hidden'; } }; }
   else { img.style.visibility='hidden'; }
   c.appendChild(img);
   const meta = document.createElement('div');
   meta.className = 'meta';
   meta.innerHTML = `<div class="nm">${escapeHtml(it.name)}</div>
-    <div class="sub">主题：${escapeHtml(it.theme||'-')} · ${it.count} 张 · ${it.created_at||''}</div>`;
+    <div class="sub">主题：${escapeHtml(it.theme||'-')} · ${it.count} 张 · ${it.created_at||''}${it.source==='local'?' · 本机':''}</div>`;
   c.appendChild(meta);
   const acts = document.createElement('div');
   acts.className = 'acts';
   const bEdit = document.createElement('button');
   bEdit.className='edit'; bEdit.textContent='重新修改';
-  bEdit.onclick = () => reEdit(it.id);
+  bEdit.onclick = () => reEdit(it);
   const bView = document.createElement('button');
   bView.className='view'; bView.textContent='查看';
-  bView.onclick = () => viewHistory(it.id);
+  bView.onclick = () => viewHistory(it);
   const bDel = document.createElement('button');
   bDel.className='del'; bDel.textContent='删除';
-  bDel.onclick = () => delHistory(it.id);
+  bDel.onclick = () => delHistory(it);
   acts.append(bEdit, bView, bDel);
   c.appendChild(acts);
   return c;
 }
 
-async function reEdit(id){
-  try {
-    const r = await fetch('/history/' + id);
-    const rec = await r.json();
-    if (rec.error){ alert(rec.error); return; }
-    const a = rec.answers || {};
-    $('kids').value = a.kids || '';
-    $('format').value = a.format || '';
-    $('personality').value = a.personality || '';
-    $('effect').value = a.effect || '';
-    $('theme').value = a.theme || '';
-    $('historySection').style.display = 'none';
-    $('formCard').scrollIntoView({behavior:'smooth'});
-    toast('已填入历史参数，修改后点「生成」即可');
-  } catch(e){ alert('读取失败：' + e.message); }
+async function reEdit(it){
+  let a = it.answers;
+  if (it.source === 'server'){
+    try { const r = await fetch('/history/' + it.id); const rec = await r.json(); if(rec.error){alert(rec.error);return;} a = rec.answers; }
+    catch(e){ alert('读取失败：' + e.message); return; }
+  }
+  a = a || {};
+  $('kids').value = a.kids || '';
+  $('format').value = a.format || '';
+  $('personality').value = a.personality || '';
+  $('effect').value = a.effect || '';
+  $('theme').value = a.theme || '';
+  $('historySection').style.display = 'none';
+  $('formCard').scrollIntoView({behavior:'smooth'});
+  toast('已填入历史参数，修改后点「生成」即可');
 }
 
-async function viewHistory(id){
-  try {
-    const r = await fetch('/history/' + id);
-    const rec = await r.json();
-    if (rec.error){ alert(rec.error); return; }
-    $('results').style.display = 'block';
-    $('historySection').style.display = 'none';
-    renderResults(rec.results || []);
-    $('results').scrollIntoView({behavior:'smooth'});
-  } catch(e){ alert('查看失败：' + e.message); }
+async function viewHistory(it){
+  let results = it.results;
+  if (it.source === 'server'){
+    try { const r = await fetch('/history/' + it.id); const rec = await r.json(); if(rec.error){alert(rec.error);return;} results = rec.results; }
+    catch(e){ alert('查看失败：' + e.message); return; }
+  }
+  results = results || [];
+  $('results').style.display = 'block';
+  $('historySection').style.display = 'none';
+  renderResults(results);
+  $('results').scrollIntoView({behavior:'smooth'});
 }
 
-async function delHistory(id){
+async function delHistory(it){
   if (!confirm('确定删除这条历史主题？')) return;
+  if (it.source === 'local'){
+    removeLocalTheme(it.id); toast('已删除（本机）'); loadHistory(); return;
+  }
   try {
-    const r = await fetch('/history/' + id, {method:'DELETE'});
+    const r = await fetch('/history/' + it.id, {method:'DELETE'});
     const data = await r.json();
     if (data.ok){ toast('已删除'); loadHistory(); }
     else { alert('删除失败'); }
   } catch(e){ alert('删除失败：' + e.message); }
 }
 
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, m => (
-    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]
-  ));
-}
-
-function openLb(src, title, prompt){
-  $('lbImg').src = src;
-  $('lbInfo').innerHTML = `<b>${title}</b><br>${prompt}`;
+function openLb(primary, fallback, title, prompt){
+  const show = (src)=>{
+    if(!src){ $('lbImg').style.display='none'; }
+    else { $('lbImg').style.display='block'; $('lbImg').src=src; }
+  };
+  show(primary);
+  $('lbImg').onerror = () => { if(fallback && primary!==fallback){ show(fallback); $('lbImg').onerror=null; } };
+  $('lbInfo').innerHTML = `<b>${escapeHtml(title)}</b><br>${(escapeHtml(prompt||'')).replace(/\n/g,'<br>')}`;
   $('lb').classList.add('show');
 }
 function closeLb(){ $('lb').classList.remove('show'); }

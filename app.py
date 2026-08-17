@@ -216,11 +216,13 @@ def run_job(job_id: str, answers: dict, token: str):
             "idx": item["idx"],
             "title": item["title"],
             "prompt": item["prompt"],
-            "image": None,
+            "image": None,        # 本地下载路径（部署环境可能因重启/重部署而失效）
+            "remote_url": None,   # 混元返回的原始远程地址，作为本地图失效后的回退
             "error": None,
         }
         try:
             url = generate_image_url(item["prompt"], token)
+            record["remote_url"] = url   # 先存远程地址，保证历史记录里的图有兜底
             ext = ".jpg"
             fname = f"{job_id}_{item['kind']}_{item['idx']}{ext}"
             save_path = os.path.join(GENERATED_DIR, fname)
@@ -329,13 +331,15 @@ def history_list():
     for r in load_history():
         res = r.get("results", [])
         cover = next((x.get("image") for x in res if x.get("image")), None)
+        remote_cover = next((x.get("remote_url") for x in res if x.get("remote_url")), None)
         items.append({
             "id": r.get("id"),
             "name": r.get("name"),
             "created_at": r.get("created_at"),
             "theme": r.get("answers", {}).get("theme", ""),
             "cover": cover,
-            "count": len([x for x in res if x.get("image")]),
+            "remote_cover": remote_cover,
+            "count": len([x for x in res if x.get("image") or x.get("remote_url")]),
         })
     return jsonify(items)
 
