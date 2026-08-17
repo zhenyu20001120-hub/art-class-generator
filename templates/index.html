@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>小小艺术家 · 课堂效果图生成器</title>
+<title>小小艺术家 · 论坛风实拍效果图生成器</title>
 <style>
   :root{
     --bg:#fdf6ec; --card:#ffffff; --ink:#3a3a3a; --muted:#8a8a8a;
@@ -16,6 +16,10 @@
   header{text-align:center;margin-bottom:22px;}
   header h1{font-size:28px;margin:0 0 6px;color:var(--primary-d);}
   header p{margin:0;color:var(--muted);font-size:14px;}
+  .nav{margin-top:12px;}
+  .nav button{background:#fff;border:1px solid var(--line);border-radius:999px;
+    padding:6px 16px;font-size:13px;color:var(--primary-d);cursor:pointer;font-weight:700;margin:3px;}
+  .nav button:hover{background:#fff3e6;}
   .badges{margin-top:10px;}
   .badge{display:inline-block;background:#fff;border:1px solid var(--line);
     border-radius:999px;padding:4px 12px;font-size:12px;color:var(--muted);margin:3px;}
@@ -34,6 +38,7 @@
     font-size:17px;font-weight:700;cursor:pointer;transition:.2s;}
   .btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(245,106,60,.3);}
   .btn:disabled{opacity:.6;cursor:not-allowed;}
+  .btn.ghost{background:linear-gradient(135deg,#5cc8ff,#3aa0e0);}
   .progress{display:none;margin-top:18px;}
   .bar{height:14px;background:#f0e6da;border-radius:999px;overflow:hidden;}
   .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--primary));
@@ -52,6 +57,28 @@
   .thumb .cap{padding:8px 10px;font-size:12.5px;font-weight:600;}
   .thumb .err{padding:8px 10px;font-size:12px;color:#c0392b;}
   .empty{color:var(--muted);font-size:13px;padding:10px 2px;}
+  /* 保存栏 */
+  .savebar{display:none;margin-top:16px;background:#fffaf3;border:1px dashed var(--primary);
+    border-radius:14px;padding:14px;align-items:center;gap:10px;flex-wrap:wrap;}
+  .savebar input{flex:1;min-width:140px;padding:10px 12px;border:1.5px solid var(--line);
+    border-radius:10px;font-size:14px;outline:none;}
+  .savebar input:focus{border-color:var(--primary);}
+  .savebar .btn{width:auto;padding:10px 18px;font-size:14px;}
+  .savebar .tip{width:100%;font-size:12px;color:var(--muted);}
+  /* 历史 */
+  .hist-card{display:flex;gap:14px;align-items:center;background:#fff;border:1px solid var(--line);
+    border-radius:14px;padding:12px;margin-bottom:12px;box-shadow:0 4px 14px rgba(0,0,0,.04);}
+  .hist-card img{width:84px;height:84px;object-fit:cover;border-radius:10px;background:#f3eee7;flex:none;}
+  .hist-card .meta{flex:1;min-width:0;}
+  .hist-card .meta .nm{font-weight:800;font-size:15px;}
+  .hist-card .meta .sub{font-size:12px;color:var(--muted);margin-top:3px;}
+  .hist-card .acts{display:flex;flex-direction:column;gap:6px;flex:none;}
+  .hist-card .acts button{border:none;border-radius:10px;padding:8px 12px;font-size:13px;
+    font-weight:700;cursor:pointer;white-space:nowrap;}
+  .hist-card .acts .edit{background:linear-gradient(135deg,var(--primary),var(--primary-d));color:#fff;}
+  .hist-card .acts .view{background:#fff3e6;color:var(--primary-d);}
+  .hist-card .acts .del{background:#fbeaea;color:#c0392b;}
+  .hist-empty{color:var(--muted);font-size:13px;padding:8px 2px;}
   /* lightbox */
   .lb{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;align-items:center;
     justify-content:center;flex-direction:column;z-index:99;padding:20px;}
@@ -60,17 +87,25 @@
   .lb .info{color:#fff;max-width:680px;text-align:center;margin-top:14px;font-size:14px;line-height:1.6;}
   .lb .close{position:absolute;top:18px;right:24px;color:#fff;font-size:30px;cursor:pointer;}
   footer{text-align:center;color:var(--muted);font-size:12px;margin-top:30px;}
+  .toast{position:fixed;left:50%;bottom:32px;transform:translateX(-50%);
+    background:rgba(40,40,40,.92);color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;
+    z-index:120;opacity:0;transition:.3s;pointer-events:none;}
+  .toast.show{opacity:1;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>🎨 小小艺术家 · 课堂效果图生成器</h1>
-    <p>填几个问题，一键生成「论坛风参考图 + 对应课堂效果图」，专为 4-5 岁小朋友的动手能力设计。</p>
+    <h1>🎨 小小艺术家 · 论坛风实拍效果图生成器</h1>
+    <p>填几个问题，一键生成 8 张「论坛风实拍效果图」，专为 4-5 岁小朋友的动手能力设计。</p>
     <div class="badges">
       <span class="badge">只做撕 · 贴 · 涂 · 点</span>
       <span class="badge">4-5 岁可操作</span>
-      <span class="badge">8 参考 + 8 效果</span>
+      <span class="badge">8 张实拍效果</span>
+    </div>
+    <div class="nav">
+      <button id="toHistory">📚 历史主题</button>
+      <button id="toTop">↑ 回到顶部生成</button>
     </div>
   </header>
 
@@ -97,21 +132,31 @@
       <input id="theme" placeholder="例如：海洋小动物 / 恐龙 / 太空 / 春天花园">
       <div class="hint">留空默认主题：海洋小动物。</div>
     </div>
-    <button class="btn" id="go">✨ 生成我的课堂效果图</button>
-    <button class="btn" id="demo" style="margin-top:10px;background:linear-gradient(135deg,#5cc8ff,#3aa0e0);">👉 不想填？直接看示例效果</button>
+    <button class="btn" id="go">✨ 生成我的论坛风实拍效果图</button>
+    <button class="btn ghost" id="demo" style="margin-top:10px;">👉 不想填？直接看示例效果</button>
 
     <div class="progress" id="progress">
       <div class="bar"><i id="bar"></i></div>
       <div class="ptext" id="ptext">准备中…</div>
     </div>
+
+    <!-- 生成完成后出现的保存栏 -->
+    <div class="savebar" id="savebar">
+      <input id="saveName" placeholder="给这套主题起个名字（可留空，默认用主题名）">
+      <button class="btn" id="saveBtn">💾 保存主题</button>
+      <div class="tip">保存后可在「📚 历史主题」里随时查看、重新修改或删除。</div>
+    </div>
   </div>
 
   <div id="results" style="display:none;">
-    <div class="section-title">📌 论坛风参考图 <span class="tag">像家长/老师随手拍的真实作品</span></div>
-    <div class="grid" id="refGrid"><div class="empty">等待生成…</div></div>
+    <div class="section-title">📸 论坛风实拍效果图 <span class="tag">像家长/老师随手拍的真实作品</span></div>
+    <div class="grid" id="forumGrid"><div class="empty">等待生成…</div></div>
+  </div>
 
-    <div class="section-title">🖼️ 对应课堂效果图 <span class="tag">按主题落地的幼儿成品</span></div>
-    <div class="grid" id="effGrid"><div class="empty">等待生成…</div></div>
+  <!-- 历史主题区块 -->
+  <div id="historySection" style="display:none;">
+    <div class="section-title">📚 历史主题 <span class="tag">云端保存，可重新修改</span></div>
+    <div id="histList"><div class="hist-empty">还没有保存过主题，生成后点「💾 保存主题」即可留档。</div></div>
   </div>
 
   <footer>生图由腾讯云混元生图驱动 · 作品风格适配 4-5 岁动手能力</footer>
@@ -122,10 +167,16 @@
   <img id="lbImg" src="" alt="">
   <div class="info" id="lbInfo"></div>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
 const $ = id => document.getElementById(id);
 let jobId = null, timer = null;
+
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
 
 $('demo').onclick = () => {
   $('kids').value='8 个';
@@ -147,6 +198,8 @@ $('go').onclick = async () => {
   $('go').disabled = true;
   $('progress').style.display = 'block';
   $('results').style.display = 'block';
+  $('savebar').style.display = 'none';
+  $('saveName').value = '';
   setBar(0, 1, '提交中…');
 
   try {
@@ -177,6 +230,7 @@ function poll(){
         clearInterval(timer);
         setBar(done, total, `全部完成！共 ${done} 张`);
         resetBtn();
+        $('savebar').style.display = 'flex';   // 生成完成，显示保存栏
       }
     } catch(e) { /* 继续轮询 */ }
   }, 2000);
@@ -189,10 +243,8 @@ function setBar(done, total, text){
 }
 
 function renderResults(results){
-  const ref = results.filter(r=>r.kind==='reference').sort((a,b)=>a.idx-b.idx);
-  const eff = results.filter(r=>r.kind==='effect').sort((a,b)=>a.idx-b.idx);
-  fill('refGrid', ref);
-  fill('effGrid', eff);
+  const forum = results.filter(r=>r.kind==='forum').sort((a,b)=>a.idx-b.idx);
+  fill('forumGrid', forum);
 }
 
 function fill(gridId, list){
@@ -205,6 +257,8 @@ function fill(gridId, list){
     if (it.image){
       const img = document.createElement('img');
       img.src = it.image; img.alt = it.title;
+      img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'),
+        {className:'err', textContent:'图片已失效'})); };
       d.appendChild(img);
       const cap = document.createElement('div');
       cap.className = 'cap'; cap.textContent = it.title;
@@ -221,6 +275,126 @@ function fill(gridId, list){
     }
     g.appendChild(d);
   });
+}
+
+// ---------------- 保存主题 ----------------
+$('saveBtn').onclick = async () => {
+  if (!jobId){ alert('还没有可保存的生成结果'); return; }
+  const name = $('saveName').value.trim();
+  $('saveBtn').disabled = true;
+  try {
+    const r = await fetch('/save', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({job_id: jobId, name})
+    });
+    const data = await r.json();
+    if (data.error){ alert(data.error); }
+    else { toast('已保存到历史主题：' + data.name); $('savebar').style.display='none'; }
+  } catch(e){ alert('保存失败：' + e.message); }
+  finally { $('saveBtn').disabled = false; }
+};
+
+// ---------------- 历史主题 ----------------
+$('toHistory').onclick = () => {
+  const sec = $('historySection');
+  if (sec.style.display === 'none'){
+    sec.style.display = 'block';
+    loadHistory();
+    sec.scrollIntoView({behavior:'smooth'});
+  } else {
+    sec.style.display = 'none';
+  }
+};
+$('toTop').onclick = () => $('formCard').scrollIntoView({behavior:'smooth'});
+
+async function loadHistory(){
+  const list = $('histList');
+  list.innerHTML = '<div class="hist-empty">加载中…</div>';
+  try {
+    const r = await fetch('/history');
+    const items = await r.json();
+    if (!items.length){
+      list.innerHTML = '<div class="hist-empty">还没有保存过主题，生成后点「💾 保存主题」即可留档。</div>';
+      return;
+    }
+    list.innerHTML = '';
+    items.forEach(it => list.appendChild(histCard(it)));
+  } catch(e){
+    list.innerHTML = '<div class="hist-empty">加载历史失败：' + e.message + '</div>';
+  }
+}
+
+function histCard(it){
+  const c = document.createElement('div');
+  c.className = 'hist-card';
+  const img = document.createElement('img');
+  if (it.cover){ img.src = it.cover; img.onerror = ()=>{img.replaceWith(Object.assign(document.createElement('div'),{style:'width:84px;height:84px;flex:none;background:#f3eee7;border-radius:10px'}));}; }
+  else { img.style.visibility='hidden'; }
+  c.appendChild(img);
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.innerHTML = `<div class="nm">${escapeHtml(it.name)}</div>
+    <div class="sub">主题：${escapeHtml(it.theme||'-')} · ${it.count} 张 · ${it.created_at||''}</div>`;
+  c.appendChild(meta);
+  const acts = document.createElement('div');
+  acts.className = 'acts';
+  const bEdit = document.createElement('button');
+  bEdit.className='edit'; bEdit.textContent='重新修改';
+  bEdit.onclick = () => reEdit(it.id);
+  const bView = document.createElement('button');
+  bView.className='view'; bView.textContent='查看';
+  bView.onclick = () => viewHistory(it.id);
+  const bDel = document.createElement('button');
+  bDel.className='del'; bDel.textContent='删除';
+  bDel.onclick = () => delHistory(it.id);
+  acts.append(bEdit, bView, bDel);
+  c.appendChild(acts);
+  return c;
+}
+
+async function reEdit(id){
+  try {
+    const r = await fetch('/history/' + id);
+    const rec = await r.json();
+    if (rec.error){ alert(rec.error); return; }
+    const a = rec.answers || {};
+    $('kids').value = a.kids || '';
+    $('format').value = a.format || '';
+    $('personality').value = a.personality || '';
+    $('effect').value = a.effect || '';
+    $('theme').value = a.theme || '';
+    $('historySection').style.display = 'none';
+    $('formCard').scrollIntoView({behavior:'smooth'});
+    toast('已填入历史参数，修改后点「生成」即可');
+  } catch(e){ alert('读取失败：' + e.message); }
+}
+
+async function viewHistory(id){
+  try {
+    const r = await fetch('/history/' + id);
+    const rec = await r.json();
+    if (rec.error){ alert(rec.error); return; }
+    $('results').style.display = 'block';
+    $('historySection').style.display = 'none';
+    renderResults(rec.results || []);
+    $('results').scrollIntoView({behavior:'smooth'});
+  } catch(e){ alert('查看失败：' + e.message); }
+}
+
+async function delHistory(id){
+  if (!confirm('确定删除这条历史主题？')) return;
+  try {
+    const r = await fetch('/history/' + id, {method:'DELETE'});
+    const data = await r.json();
+    if (data.ok){ toast('已删除'); loadHistory(); }
+    else { alert('删除失败'); }
+  } catch(e){ alert('删除失败：' + e.message); }
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]
+  ));
 }
 
 function openLb(src, title, prompt){

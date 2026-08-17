@@ -2,22 +2,24 @@
 """
 艺术课效果图生成器 · 后端
 --------------------------------
-交互问卷 -> 根据用户回答生成 16 张图：
-  · 8 张「论坛风参考图」（像家长/幼教在小红书随手拍的真实作品照）
-  · 8 张「对应课堂效果图」（按主题落地的 4-5 岁幼儿成品效果图）
+交互问卷 -> 根据用户回答生成 8 张「论坛风实拍效果图」
+（像家长/幼教在小红书、育儿论坛随手拍分享的真实作品照）。
+
+支持把生成结果「保存为主题」到服务端，形成历史记录，
+并可随时查看历史、一键重新修改。
+
 生图调用打包进来的 buddy_cloud.py（腾讯云混元生图 3.0）。
 """
 
 import os
-import io
 import json
-import time
 import uuid
 import threading
+from datetime import datetime, timezone
 
 import requests
 from flask import (
-    Flask, request, render_template, jsonify, send_from_directory, abort
+    Flask, request, render_template, jsonify, send_from_directory
 )
 
 # ---------------------------------------------------------------------------
@@ -25,7 +27,10 @@ from flask import (
 # ---------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GENERATED_DIR = os.path.join(BASE_DIR, "static", "generated")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
 os.makedirs(GENERATED_DIR, exist_ok=True)
+os.makedirs(DATA_DIR, exist_ok=True)
 
 SCRIPT = os.path.join(BASE_DIR, "buddy_cloud.py")
 RESOLUTION = "768:1024"   # 竖版，适合手机/平板查看
@@ -35,6 +40,9 @@ app = Flask(__name__)
 # 任务状态表（内存存储，部署在单实例下足够用）
 JOBS = {}
 JOBS_LOCK = threading.Lock()
+
+# 历史记录锁（文件读写）
+HISTORY_LOCK = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -69,10 +77,11 @@ ACTIVITIES = [
 
 
 # ---------------------------------------------------------------------------
-# Prompt 构造：把 5 个回答 + 8 个活动类型 拼成 16 条生图提示词
+# Prompt 构造：把 5 个回答 + 8 个活动类型 拼成 8 条「论坛风实拍效果图」提示词
+# （已移除「课堂效果图」，只保留论坛风真实作品照风格）
 # ---------------------------------------------------------------------------
 def build_prompts(answers: dict) -> list:
-    """返回 16 条 prompt，结构：{kind, idx, title, prompt}"""
+    """返回 8 条 prompt，结构：{kind, idx, title, prompt}"""
     theme = (answers.get("theme") or "海洋小动物").strip() or "海洋小动物"
     kids = (answers.get("kids") or "一群").strip()
     fmt = (answers.get("format") or "幼儿园班级课").strip()
@@ -81,35 +90,68 @@ def build_prompts(answers: dict) -> list:
 
     prompts = []
     for i, (act_name, act_desc) in enumerate(ACTIVITIES, start=1):
-        # (a) 论坛风参考图：像真实家长/老师随手拍的作品照
-        ref_prompt = (
-            f"真实照片，像家长或幼教在小红书、育儿论坛随手拍的，"
-            f"4到5岁幼儿园小朋友用「{act_name}」做的「{theme}」主题手工作品。"
-            f"自然光，手机原图，未修图，能看到稚拙笔触与童趣，"
-            f"背景是普通家庭或教室桌面，照片真实感，无文字，无精细塑形"
-        )
-        # (b) 对应课堂效果图：按主题落地的成品效果图
-        eff_prompt = (
-            f"课堂成品效果图：{theme}主题创意美术课，第{i}课「{act_name}」。"
-            f"面向{kids}个小朋友，教学形式：{fmt}，"
+        # 论坛风实拍效果图：像真实家长/老师随手拍分享的成品照
+        prompt = (
+            f"论坛风实拍效果图，像家长或幼教在小红书、育儿论坛随手拍分享的成品照："
+            f"4到5岁幼儿园小朋友（约{kids}）在「{fmt}」上，"
+            f"用「{act_name}」完成的「{theme}」主题手工作品，"
             f"适合{personality}的孩子，目标：{effect}。"
-            f"具体做法：{act_desc}。A3卡纸底板，明显稚拙童趣手作质感，"
-            f"边缘不整齐、手工痕迹明显，明亮均匀布光，45度俯拍，"
-            f"照片真实感，无文字，无精细塑形"
+            f"具体做法：{act_desc}。"
+            f"自然光，手机原图质感，未修图，稚拙童趣笔触清晰可见，"
+            f"背景是普通家庭或教室桌面，照片级真实感，无文字，无精细塑形"
         )
         prompts.append({
-            "kind": "reference",
+            "kind": "forum",
             "idx": i,
-            "title": f"参考图 {i} · {act_name}",
-            "prompt": ref_prompt,
-        })
-        prompts.append({
-            "kind": "effect",
-            "idx": i,
-            "title": f"效果图 {i} · {act_name}",
-            "prompt": eff_prompt,
+            "title": f"论坛风实拍效果图 {i} · {act_name}",
+            "prompt": prompt,
         })
     return prompts
+
+
+# ---------------------------------------------------------------------------
+# 历史记录（服务端 JSON 文件存储）
+# ---------------------------------------------------------------------------
+def load_history() -> list:
+    with HISTORY_LOCK:
+        if not os.path.exists(HISTORY_FILE):
+            return []
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+
+
+def write_history(lst: list):
+    with HISTORY_LOCK:
+        tmp = HISTORY_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(lst, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, HISTORY_FILE)
+
+
+def add_history_record(rec: dict) -> dict:
+    lst = load_history()
+    lst.insert(0, rec)          # 最新在最前
+    write_history(lst)
+    return rec
+
+
+def get_history_record(rid: str):
+    for r in load_history():
+        if r.get("id") == rid:
+            return r
+    return None
+
+
+def delete_history_record(rid: str) -> bool:
+    lst = load_history()
+    new = [r for r in lst if r.get("id") != rid]
+    if len(new) != len(lst):
+        write_history(new)
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +269,7 @@ def generate():
             "total": 0,
             "done": 0,
             "results": [],
+            "answers": answers,
         }
     t = threading.Thread(target=run_job, args=(job_id, answers, token), daemon=True)
     t.start()
@@ -247,6 +290,71 @@ def status(job_id):
         })
 
 
+@app.route("/save", methods=["POST"])
+def save_theme():
+    """把一次已完成的生成结果保存为主题历史记录。"""
+    data = request.get_json(silent=True) or {}
+    job_id = (data.get("job_id") or "").strip()
+    name = (data.get("name") or "").strip()
+
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+
+    if not job:
+        return jsonify({"error": "任务不存在，请先生成再保存"}), 400
+    if job.get("status") != "finished":
+        return jsonify({"error": "生成尚未完成，请稍候再保存"}), 400
+
+    answers = job.get("answers", {})
+    results = job.get("results", [])
+
+    if not name:
+        name = (answers.get("theme") or "").strip() or "未命名主题"
+
+    rec = {
+        "id": uuid.uuid4().hex,
+        "name": name,
+        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "answers": answers,
+        "results": results,
+    }
+    add_history_record(rec)
+    return jsonify({"id": rec["id"], "name": rec["name"]})
+
+
+@app.route("/history", methods=["GET"])
+def history_list():
+    """返回历史主题列表（不含完整 results，仅摘要信息）。"""
+    items = []
+    for r in load_history():
+        res = r.get("results", [])
+        cover = next((x.get("image") for x in res if x.get("image")), None)
+        items.append({
+            "id": r.get("id"),
+            "name": r.get("name"),
+            "created_at": r.get("created_at"),
+            "theme": r.get("answers", {}).get("theme", ""),
+            "cover": cover,
+            "count": len([x for x in res if x.get("image")]),
+        })
+    return jsonify(items)
+
+
+@app.route("/history/<rid>", methods=["GET"])
+def history_detail(rid):
+    """返回某条历史主题的完整记录（含 5 个回答与生成结果）。"""
+    r = get_history_record(rid)
+    if not r:
+        return jsonify({"error": "主题不存在"}), 404
+    return jsonify(r)
+
+
+@app.route("/history/<rid>", methods=["DELETE"])
+def history_delete(rid):
+    ok = delete_history_record(rid)
+    return jsonify({"ok": ok})
+
+
 @app.route("/static/generated/<path:filename>")
 def generated_file(filename):
     return send_from_directory(GENERATED_DIR, filename)
@@ -254,6 +362,5 @@ def generated_file(filename):
 
 # 本地直接运行
 if __name__ == "__main__":
-    # 把 token 写到 token.txt 方便本地调试（仅本地，已被 .gitignore 忽略）
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port, debug=False)

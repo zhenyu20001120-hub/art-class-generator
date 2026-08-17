@@ -7,4 +7,5 @@ token.txt
 venv/
 static/generated/*
 !static/generated/.gitkeep
+data/
 samples/
