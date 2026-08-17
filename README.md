@@ -1,0 +1,118 @@
+# 🎨 小小艺术家 · 课堂效果图生成器
+
+一个给 **4-5 岁小朋友** 用的创意美术课效果图生成小工具。
+
+你（老师/家长）在网页上填 5 个简单问题 → 程序调用 AI 生图接口 → 自动产出 **8 张「论坛风参考图」+ 8 张「对应课堂效果图」**，全部适配幼儿动手能力（只做撕、贴、涂、点；不要求精细剪纸或塑形）。
+
+---
+
+## 它能帮你做什么
+
+| 输出 | 说明 |
+| --- | --- |
+| 📌 论坛风参考图 ×8 | 像家长/幼教在小红书、育儿论坛随手拍的真实作品照，给你找灵感 |
+| 🖼️ 对应课堂效果图 ×8 | 按你填的主题与条件，落地的 4-5 岁幼儿成品效果图 |
+
+每张图对应一个通用的幼儿手工活动类型（涂鸦 / 撕纸 / 手指点画 / 简单图形 / 纸盘纸杯变身 / 泡泡膜拓印 / 综合拼贴 / 作品展示），可套任意主题。
+
+## 5 个提问维度
+
+1. **要教几个小孩？** —— 人数或班级规模
+2. **教学形式？** —— 幼儿园班级课 / 亲子活动 / 兴趣班 / 一对一
+3. **小孩性格？** —— 活泼好动 / 安静专注 / 混合
+4. **期望效果？** —— 培养专注力 / 亲子互动 / 做节日礼物 / 作品展示
+5. **主题？** —— 海洋小动物 / 恐龙 / 太空 / 春天花园……（留空默认「海洋小动物」）
+
+---
+
+## 目录结构
+
+```
+art-class-generator/
+├── app.py                # Flask 后端：问卷接口 + 生图调度
+├── buddy_cloud.py        # 打包的生图客户端（腾讯云混元生图 3.0，自带签名）
+├── requirements.txt      # 依赖：flask, requests
+├── templates/
+│   └── index.html        # 前端问卷 + 画廊 + 灯箱
+├── static/
+│   └── generated/        # 生成的图片（运行时写入，已被 .gitignore 忽略）
+├── Procfile              # 供 Render 部署
+├── render.yaml           # 供 Render 一键部署
+└── README.md
+```
+
+---
+
+## 本地运行（Windows，照做即可）
+
+> 需要本机已装好 Python 3.10+。没有的话先装一个。
+
+**第 1 步：准备生图 Token（最重要）**
+
+程序靠一个「生图 Token」调用 AI。获取方式：
+- 在你的 WorkBuddy 里打开「多模态内容生成」技能，或用 `connect_cloud_service` 拿到 `tempToken`（形如 `tk_xxxx`）。
+- 把拿到的 token 存成文件：`art-class-generator/token.txt`，里面只写这一行 token，不要加别的。
+
+> 注意：这个 token 是会话级的，约 15 小时过期。过期后重新拿一个新的，覆盖 `token.txt` 即可。
+
+**第 2 步：安装依赖**
+
+```bash
+cd art-class-generator
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**第 3 步：启动**
+
+```bash
+python app.py
+```
+
+终端会显示 `Running on http://127.0.0.1:5000`。浏览器打开这个地址即可。
+点「不想填？直接看示例效果」可一键看样例；或自己填 5 个问题点生成。
+
+---
+
+## 部署成「可分享的公开链接」（推荐 Render，免费）
+
+这样别人点开链接就能直接用，不用装任何东西。
+
+1. 把这个仓库推到你的 GitHub（见下方）。
+2. 打开 https://render.com ，用 GitHub 登录。
+3. 点 **New + → Web Service → 选这个仓库**。
+4. 部署配置会自动读取 `render.yaml`（构建命令、启动命令都已写好）。
+5. 在 Render 的环境变量里加一项：
+   - 名称：`BUDDY_CLOUD_TOKEN`
+   - 值：你的生图 token（`tk_xxxx`）
+6. 点 Deploy，几分钟后拿到一个 `https://xxxx.onrender.com` 的公开链接，发给谁都能用。
+
+> token 只存在服务端，访问网页的人看不到，安全。
+
+---
+
+## 推送到 GitHub
+
+本仓库已配好 `.gitignore`（不会上传 `token.txt` 和生成的图片）。
+
+如果你用 Git：
+
+```bash
+git init
+git add .
+git commit -m "feat: 4-5岁课堂效果图生成器"
+git branch -M main
+git remote add origin <你的仓库地址>
+git push -u origin main
+```
+
+（若环境里没有 Git 客户端，也可以用 GitHub 网页端「Upload files」把文件夹拖上去。）
+
+---
+
+## 安全与费用提示
+
+- `token.txt` 和 `static/generated/` 已加入 `.gitignore`，**切勿手动把它们提交到公开仓库**。
+- 生图接口按调用计费/限额，生成 16 张图 = 16 次调用，请按需使用。
+- 本工具面向 4-5 岁幼儿，所有 prompt 已限制为「无精细塑形、无危险操作」的幼儿可操作手工。

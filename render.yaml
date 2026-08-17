@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: art-class-generator
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: BUDDY_CLOUD_TOKEN
+        sync: false

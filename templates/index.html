@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小小艺术家 · 课堂效果图生成器</title>
+<style>
+  :root{
+    --bg:#fdf6ec; --card:#ffffff; --ink:#3a3a3a; --muted:#8a8a8a;
+    --primary:#ff8a5c; --primary-d:#f56a3c; --accent:#5cc8ff; --line:#eee3d6;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:linear-gradient(160deg,#fff3e6,#eaf7ff);color:var(--ink);min-height:100vh;}
+  .wrap{max-width:960px;margin:0 auto;padding:28px 18px 60px;}
+  header{text-align:center;margin-bottom:22px;}
+  header h1{font-size:28px;margin:0 0 6px;color:var(--primary-d);}
+  header p{margin:0;color:var(--muted);font-size:14px;}
+  .badges{margin-top:10px;}
+  .badge{display:inline-block;background:#fff;border:1px solid var(--line);
+    border-radius:999px;padding:4px 12px;font-size:12px;color:var(--muted);margin:3px;}
+  .card{background:var(--card);border-radius:18px;padding:22px 20px;
+    box-shadow:0 8px 24px rgba(0,0,0,.06);margin-bottom:20px;}
+  .q{margin-bottom:16px;}
+  .q label{display:block;font-weight:700;margin-bottom:6px;font-size:15px;}
+  .q label .num{display:inline-flex;width:22px;height:22px;background:var(--primary);
+    color:#fff;border-radius:50%;align-items:center;justify-content:center;font-size:13px;margin-right:8px;}
+  .q input{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:12px;
+    font-size:15px;outline:none;transition:.2s;background:#fffdf9;}
+  .q input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(255,138,92,.15);}
+  .q .hint{font-size:12px;color:var(--muted);margin-top:4px;}
+  .btn{display:block;width:100%;padding:14px;border:none;border-radius:14px;
+    background:linear-gradient(135deg,var(--primary),var(--primary-d));color:#fff;
+    font-size:17px;font-weight:700;cursor:pointer;transition:.2s;}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(245,106,60,.3);}
+  .btn:disabled{opacity:.6;cursor:not-allowed;}
+  .progress{display:none;margin-top:18px;}
+  .bar{height:14px;background:#f0e6da;border-radius:999px;overflow:hidden;}
+  .bar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--primary));
+    transition:width .4s;}
+  .ptext{text-align:center;font-size:13px;color:var(--muted);margin-top:8px;}
+  .section-title{font-size:19px;font-weight:800;margin:26px 0 12px;color:var(--primary-d);
+    display:flex;align-items:center;gap:8px;}
+  .section-title .tag{font-size:12px;font-weight:600;background:#fff3e6;color:var(--primary-d);
+    border-radius:999px;padding:3px 10px;}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+  @media(min-width:680px){.grid{grid-template-columns:repeat(4,1fr);}}
+  .thumb{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    cursor:pointer;transition:.2s;}
+  .thumb:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.08);}
+  .thumb img{width:100%;height:150px;object-fit:cover;display:block;background:#f3eee7;}
+  .thumb .cap{padding:8px 10px;font-size:12.5px;font-weight:600;}
+  .thumb .err{padding:8px 10px;font-size:12px;color:#c0392b;}
+  .empty{color:var(--muted);font-size:13px;padding:10px 2px;}
+  /* lightbox */
+  .lb{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;align-items:center;
+    justify-content:center;flex-direction:column;z-index:99;padding:20px;}
+  .lb.show{display:flex;}
+  .lb img{max-width:92vw;max-height:72vh;border-radius:10px;}
+  .lb .info{color:#fff;max-width:680px;text-align:center;margin-top:14px;font-size:14px;line-height:1.6;}
+  .lb .close{position:absolute;top:18px;right:24px;color:#fff;font-size:30px;cursor:pointer;}
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:30px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🎨 小小艺术家 · 课堂效果图生成器</h1>
+    <p>填几个问题，一键生成「论坛风参考图 + 对应课堂效果图」，专为 4-5 岁小朋友的动手能力设计。</p>
+    <div class="badges">
+      <span class="badge">只做撕 · 贴 · 涂 · 点</span>
+      <span class="badge">4-5 岁可操作</span>
+      <span class="badge">8 参考 + 8 效果</span>
+    </div>
+  </header>
+
+  <div class="card" id="formCard">
+    <div class="q">
+      <label><span class="num">1</span>要教几个小孩？</label>
+      <input id="kids" placeholder="例如：8 个 / 一个班 25 个 / 亲子 1 大 1 小">
+      <div class="hint">填人数或班级规模即可。</div>
+    </div>
+    <div class="q">
+      <label><span class="num">2</span>教学形式是什么样的？</label>
+      <input id="format" placeholder="例如：幼儿园班级课 / 亲子活动 / 兴趣班 / 一对一">
+    </div>
+    <div class="q">
+      <label><span class="num">3</span>小孩的性格如何？</label>
+      <input id="personality" placeholder="例如：活泼好动 / 安静专注 / 混合">
+    </div>
+    <div class="q">
+      <label><span class="num">4</span>希望达成什么样的效果？</label>
+      <input id="effect" placeholder="例如：培养专注力 / 亲子互动 / 做节日礼物 / 作品展示">
+    </div>
+    <div class="q">
+      <label><span class="num">5</span>想要什么样的主题？</label>
+      <input id="theme" placeholder="例如：海洋小动物 / 恐龙 / 太空 / 春天花园">
+      <div class="hint">留空默认主题：海洋小动物。</div>
+    </div>
+    <button class="btn" id="go">✨ 生成我的课堂效果图</button>
+    <button class="btn" id="demo" style="margin-top:10px;background:linear-gradient(135deg,#5cc8ff,#3aa0e0);">👉 不想填？直接看示例效果</button>
+
+    <div class="progress" id="progress">
+      <div class="bar"><i id="bar"></i></div>
+      <div class="ptext" id="ptext">准备中…</div>
+    </div>
+  </div>
+
+  <div id="results" style="display:none;">
+    <div class="section-title">📌 论坛风参考图 <span class="tag">像家长/老师随手拍的真实作品</span></div>
+    <div class="grid" id="refGrid"><div class="empty">等待生成…</div></div>
+
+    <div class="section-title">🖼️ 对应课堂效果图 <span class="tag">按主题落地的幼儿成品</span></div>
+    <div class="grid" id="effGrid"><div class="empty">等待生成…</div></div>
+  </div>
+
+  <footer>生图由腾讯云混元生图驱动 · 作品风格适配 4-5 岁动手能力</footer>
+</div>
+
+<div class="lb" id="lb">
+  <span class="close" onclick="closeLb()">×</span>
+  <img id="lbImg" src="" alt="">
+  <div class="info" id="lbInfo"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let jobId = null, timer = null;
+
+$('demo').onclick = () => {
+  $('kids').value='8 个';
+  $('format').value='幼儿园班级课';
+  $('personality').value='活泼好动';
+  $('effect').value='培养专注力与亲子互动';
+  $('theme').value='海洋小动物';
+  $('go').click();
+};
+
+$('go').onclick = async () => {
+  const answers = {
+    kids: $('kids').value.trim(),
+    format: $('format').value.trim(),
+    personality: $('personality').value.trim(),
+    effect: $('effect').value.trim(),
+    theme: $('theme').value.trim(),
+  };
+  $('go').disabled = true;
+  $('progress').style.display = 'block';
+  $('results').style.display = 'block';
+  setBar(0, 1, '提交中…');
+
+  try {
+    const r = await fetch('/generate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(answers)
+    });
+    const data = await r.json();
+    if (data.error) { alert(data.error); resetBtn(); return; }
+    jobId = data.job_id;
+    poll();
+  } catch(e) {
+    alert('提交失败：' + e.message);
+    resetBtn();
+  }
+};
+
+function poll(){
+  timer = setInterval(async () => {
+    try {
+      const r = await fetch('/status/' + jobId);
+      const s = await r.json();
+      if (s.error) { clearInterval(timer); alert(s.error); resetBtn(); return; }
+      const done = s.done || 0, total = s.total || 0;
+      setBar(done, total, total ? `已生成 ${done} / ${total} 张` : '排队中…');
+      renderResults(s.results || []);
+      if (s.status === 'finished') {
+        clearInterval(timer);
+        setBar(done, total, `全部完成！共 ${done} 张`);
+        resetBtn();
+      }
+    } catch(e) { /* 继续轮询 */ }
+  }, 2000);
+}
+
+function setBar(done, total, text){
+  const pct = total ? Math.round(done/total*100) : 0;
+  $('bar').style.width = pct + '%';
+  $('ptext').textContent = text;
+}
+
+function renderResults(results){
+  const ref = results.filter(r=>r.kind==='reference').sort((a,b)=>a.idx-b.idx);
+  const eff = results.filter(r=>r.kind==='effect').sort((a,b)=>a.idx-b.idx);
+  fill('refGrid', ref);
+  fill('effGrid', eff);
+}
+
+function fill(gridId, list){
+  const g = $(gridId);
+  if (!list.length){ return; }
+  g.innerHTML = '';
+  list.forEach(it => {
+    const d = document.createElement('div');
+    d.className = 'thumb';
+    if (it.image){
+      const img = document.createElement('img');
+      img.src = it.image; img.alt = it.title;
+      d.appendChild(img);
+      const cap = document.createElement('div');
+      cap.className = 'cap'; cap.textContent = it.title;
+      d.appendChild(cap);
+      d.onclick = () => openLb(it.image, it.title, it.prompt);
+    } else if (it.error){
+      const e = document.createElement('div');
+      e.className = 'err'; e.textContent = '⚠️ ' + it.title + ' 失败';
+      d.appendChild(e);
+    } else {
+      const e = document.createElement('div');
+      e.className = 'err'; e.textContent = '⏳ ' + it.title;
+      d.appendChild(e);
+    }
+    g.appendChild(d);
+  });
+}
+
+function openLb(src, title, prompt){
+  $('lbImg').src = src;
+  $('lbInfo').innerHTML = `<b>${title}</b><br>${prompt}`;
+  $('lb').classList.add('show');
+}
+function closeLb(){ $('lb').classList.remove('show'); }
+$('lb').onclick = e => { if(e.target.id==='lb') closeLb(); };
+
+function resetBtn(){ $('go').disabled = false; }
+</script>
+</body>
+</html>

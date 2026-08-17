@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+token.txt
+.env
+.venv/
+venv/
+static/generated/*
+!static/generated/.gitkeep
+samples/
